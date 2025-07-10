@@ -1,13 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from dotenv import load_dotenv
-import os, datetime, httpx, models, database, json
-import redis
+import os, datetime, httpx, models, database, json, redis, asyncio
+
+
+#stop database, track request, and check if favorite can be tracked
 
 load_dotenv()
 app = FastAPI()
 TRIMET_APP_ID=os.getenv("TRIMET_API_KEY")
 client = httpx.AsyncClient()
-#database.Base.metadata.drop_all(bind=database.engine)
+database.Base.metadata.drop_all(bind=database.engine)
 database.Base.metadata.create_all(bind=database.engine)
 REDIS_URL=os.getenv("REDIS_URL")
 
@@ -61,9 +63,16 @@ async def get_arrivals(stop_id: int):
     return arrivals_db # -> {k:v.dict() for k, v in arrivals_db.items()}
 
 @app.get("/stops")
-async def get_stop(longitude: float, latitude: float):
-    radius = 3200 #radius of 3.2 km or roughly 2 miles
-    url = f"https://developer.trimet.org/ws/V1/stops?appID={TRIMET_APP_ID}&ll={longitude},{latitude}&meters={radius}&json=true"
+async def get_stops():
+    db = database.SessionLocal()
+    toReturn = db.query(database.Stop).all()
+    return toReturn
+
+
+@app.get("/stops/closest") #gets closest stop
+async def get_closest_stop(longitude: float, latitude: float):
+    radius = 4800 #radius of 4.8 km or roughly 3 miles
+    url = f"https://developer.trimet.org/ws/V2/stops?appID={TRIMET_APP_ID}&ll={longitude},{latitude}&meters={radius}&maxStops=1&json=true"
 
     try:
         response = await client.get(url)
@@ -116,3 +125,97 @@ def timeConvert(ms_timestamp: int):
     dt = datetime.datetime.fromtimestamp(ms_timestamp / 1000)
     # %-I is hour without leading zero (on Unix); %M is minutes; %p is AM/PM
     return dt.strftime("%-I:%M %p")
+
+async def fetch_stops():
+    url = f"https://developer.trimet.org/ws/V1/stops?appID={TRIMET_APP_ID}&bbox=-122.836,45.387,-122.471,45.608&json=true"
+
+    response = httpx.get(url)
+    response.raise_for_status()
+    data = response.json()
+    
+    stops_db = []
+
+    for stop in data.get("resultSet", {}).get("location", []):
+        stop_id = stop.get("locid", -1)
+        dir = stop.get("dir", "")
+        new_station = models.Station(
+            stop_id=stop_id,
+            name=stop.get("desc", ""),
+            dir=dir,
+            long=stop.get("lng", -1.0),
+            lat=stop.get("lat", -1.0),
+            dist=stop.get("metersDistance", 10000)
+        )
+
+        stops_db.append(new_station)
+
+    
+    return stops_db 
+
+async def sync_stop_table():
+    stops = await fetch_stops()
+    current_ids = {s.stop_id for s in stops}
+    db = database.SessionLocal()
+    try:
+        for stop in stops:
+            entry = db.query(database.Stop).filter(database.Stop.id == stop.stop_id).first()
+            if not entry:
+                new_entry = database.Stop(
+                    id=stop.stop_id,
+                    name=stop.name,
+                    lat=stop.lat,
+                    lon=stop.long
+                )
+                db.add(new_entry)
+        
+        if current_ids:
+            db.query(database.Stop).filter(~database.Stop.id.in_(current_ids)).delete(synchronize_session=False)
+        
+        db.commit()
+    finally:
+        db.close()
+
+
+@app.put("/sync_stops")
+async def sync_stops():
+    try:
+        await sync_stop_table()
+    finally:
+        {"message": "Stops successfuly synced"}
+
+@app.get("/track")
+async def track(stop_id: int, route_id: int):
+    pass
+
+
+"""
+@app.get("/stops")
+async def get_stops():
+    url = f"https://developer.trimet.org/ws/V1/stops?appID={TRIMET_APP_ID}&bbox=-122.836,45.387,-122.471,45.608&json=true"
+
+    try:
+        response = await client.get(url)
+        response.raise_for_status()
+        data  = response.json()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    stops_db = {}
+
+    for stop in data.get("resultSet", {}).get("location", []):
+        stop_id = stop.get("locid", -1)
+        dir = stop.get("dir", "")
+        new_station = models.Station(
+            stop_id=stop_id,
+            name=stop.get("desc", ""),
+            dir=dir,
+            long=stop.get("lng", -1.0),
+            lat=stop.get("lat", -1.0),
+            dist=stop.get("metersDistance", 10000)
+        )
+
+        stops_db[str(stop_id) + ":" + dir] = new_station.model_dump()
+
+    
+    return stops_db 
+    """
