@@ -12,7 +12,7 @@ class Station(BaseModel):
     stop_id: int
     name: str
     dir: str
-    long: float
+    lon: float
     lat: float
     dist: int
 
