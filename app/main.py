@@ -15,7 +15,10 @@ async def lifespan(app: FastAPI):
 
 load_dotenv()
 app = FastAPI(lifespan=lifespan)
-TRIMET_APP_ID=os.getenv("TRIMET_API_KEY")
+TRIMET_APP_ID=os.getenv("TRIMET_APP_ID")
+if not TRIMET_APP_ID:
+    raise RuntimeError("TRIMET_APP_ID is not set!")
+
 client = httpx.AsyncClient()
 #database.Base.metadata.drop_all(bind=database.engine)
 database.Base.metadata.create_all(bind=database.engine)
