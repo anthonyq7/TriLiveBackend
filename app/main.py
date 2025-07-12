@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
-import os, datetime, httpx, models, database, json, redis, asyncio, datetime
+import os, datetime, httpx, models, database, json, redis, asyncio, datetime, zoneinfo
 from scheduler import scheduler
 from contextlib import asynccontextmanager
 
@@ -108,7 +108,8 @@ async def get_closest_stop(longitude: float, latitude: float):
     
 def timeConvert(ms_timestamp: int):
     # Convert milliseconds to seconds for fromtimestamp()
-    dt = datetime.datetime.fromtimestamp(ms_timestamp / 1000)
+    pacific = zoneinfo.ZoneInfo("America/Los_Angeles")
+    dt = datetime.datetime.fromtimestamp(ms_timestamp / 1000, tz=pacific)
     # %-I is hour without leading zero (on Unix); %M is minutes; %p is AM/PM
     return dt.strftime("%-I:%M %p")
 
