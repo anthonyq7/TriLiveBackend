@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from dotenv import load_dotenv
-import os, datetime, httpx, models, database, json, redis, asyncio
-from datetime import datetime
+import os, datetime, httpx, models, database, json, redis, asyncio, datetime
 from scheduler import scheduler
 from contextlib import asynccontextmanager
 
