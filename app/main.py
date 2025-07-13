@@ -114,7 +114,7 @@ def timeConvert(ms_timestamp: int):
     return dt.strftime("%-I:%M %p")
 
 async def fetch_stops():
-    url = f"https://developer.trimet.org/ws/V1/stops?appID={TRIMET_APP_ID}&bbox=–123.15500848101786,45.065490629501255,–121.741779801749,45.738910476408655&json=true"
+    url = f"https://developer.trimet.org/ws/V1/stops?appID={TRIMET_APP_ID}&bbox=-123.15500848101786,45.065490629501255,-121.741779801749,45.738910476408655&json=true"
 
     try:
         response = await client.get(url)
